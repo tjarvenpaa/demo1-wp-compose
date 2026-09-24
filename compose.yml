@@ -1,0 +1,99 @@
+services:
+  
+  traefik:
+    image: traefik:v2.9
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--api.insecure=true" #Traefik dashboard käyttöön
+      - "--providers.docker=true" # luetaan paikallinen docker enginen pyörittämät kontit
+      - "--providers.docker.exposedbydefault=false" # Kontit eivät ole oletuksena paljastettu, julkaistaan vain ne jotka on merkitty labelilla "traefik.enable=true"
+      - "--providers.file.filename=/etc/traefik/dynamic_conf.yml" # Käytetään dynaamisia konfiguraatiotiedostoja
+      - "--entrypoints.web.address=:80" # web palveluiden portti, julkaisuun http
+      - "--entrypoints.websecure.address=:443" # websecure palveluiden portti, julkaisuun https
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080" # Traefik dashboard
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro" # docker host daemon socket, jotta traefik voi lukea docker konttien tietoja
+      - "./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro" #traefik dynaaminen konfiguraatio
+      # - "./traefik/acme.json:/acme.json" # Let's Encrypt acme.json tiedosto
+    networks:
+      - frontend
+  
+  mariadb:
+    image: mariadb:11
+    container_name: mariadb
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+    
+    command:
+     - --character-set-server=utf8mb4
+     - --collation-server=utf8mb4_unicode_ci
+    
+    volumes:
+      - ./mariadb/data:/var/lib/mysql
+    
+    networks:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command:
+     - redis-server
+     - --appendonly
+     - yes
+    networks:
+      - backend
+
+  wordpress:
+    image: wordpress:php8.3-apache
+    container_name: wordpress
+    restart: unless-stopped
+
+    depends_on:
+      - mariadb
+      - redis
+
+    environment:
+      TZ: ${TZ}
+      WORDPRESS_DB_HOST: mariadb:3306
+      WORDPRESS_DB_NAME: ${MARIADB_DATABASE}
+      WORDPRESS_DB_USER: ${MARIADB_USER}
+      WORDPRESS_DB_PASSWORD: ${MARIADB_PASSWORD}
+
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_REDIS_HOST', 'redis');
+        define('WP_REDIS_PORT', 6379);
+        define('WP_REDIS_DATABASE', 0);
+        define('WP_REDIS_MAXTTL', 86400);
+        define('WP_MEMORY_LIMIT', '256M');
+        define('FS_METHOD', 'direct');
+      
+    volumes:
+      - ./wordpress/html:/var/www/html
+
+    labels:
+      - "traefik.enable=true"
+
+      - "traefik.http.routers.wordpress.rule=Host(`${DOMAIN}`)" # Traefik reititys sääntö, ohjataan ${DOMAIN} osoitteeseen
+      - "traefik.http.routers.wordpress.entrypoints=web"
+      - "traefik.http.services.wordpress.loadbalancer.server.port=80"
+
+    networks:
+      - frontend
+      - backend
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
