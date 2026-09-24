@@ -1,0 +1,11 @@
+mariadb/data
+mariadb
+wordpress/html
+
+*.cnf
+*.log
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/

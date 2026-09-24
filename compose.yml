@@ -1,14 +1,14 @@
 services:
   
   traefik:
-    image: traefik:v2.9
+    image: traefik:v3.7
     container_name: traefik
     restart: unless-stopped
     command:
       - "--api.insecure=true" #Traefik dashboard käyttöön
       - "--providers.docker=true" # luetaan paikallinen docker enginen pyörittämät kontit
       - "--providers.docker.exposedbydefault=false" # Kontit eivät ole oletuksena paljastettu, julkaistaan vain ne jotka on merkitty labelilla "traefik.enable=true"
-      - "--providers.file.filename=/etc/traefik/dynamic_conf.yml" # Käytetään dynaamisia konfiguraatiotiedostoja
+      - "--providers.file.filename=/etc/traefik/dynamic.yml" # Käytetään dynaamisia konfiguraatiotiedostoja
       - "--entrypoints.web.address=:80" # web palveluiden portti, julkaisuun http
       - "--entrypoints.websecure.address=:443" # websecure palveluiden portti, julkaisuun https
     ports:
@@ -83,7 +83,7 @@ services:
 
     labels:
       - "traefik.enable=true"
-
+      - "traefik.docker.network=demo1-wp-compose_frontend"
       - "traefik.http.routers.wordpress.rule=Host(`${DOMAIN}`)" # Traefik reititys sääntö, ohjataan ${DOMAIN} osoitteeseen
       - "traefik.http.routers.wordpress.entrypoints=web"
       - "traefik.http.services.wordpress.loadbalancer.server.port=80"
